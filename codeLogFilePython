@@ -1,0 +1,66 @@
+import numpy as np
+import pandas as pd
+
+#table with EC50-values = pChEMBL-Values (-log10(ChEMBL-Value))
+fpr2BindingData = pd.read_csv("fpr2Full.csv",sep = ";", decimal = ",") 
+
+#table with 40% similarity to FUI-ligand
+similarStructure = pd.read_csv("40similarStructure.csv", sep = ";", decimal = ",")
+
+# Here we drop the column of Standard_Value which is unecessary 
+fpr2BindingData = fpr2BindingData.drop("Standard_Value", axis=1)
+
+#Since the csv-file I have is showing #NUMB! instead of NaN, i need to convert it by this script below
+fpr2BindingData = fpr2BindingData.drop("Standard_Value", axis=1)
+
+#Here we drop all the objects that don´t have a valid pChEMBL_value by using dropna
+fpr2BindingData = fpr2BindingData.dropna(subset = "pChEMBL_Value")
+# after using shape function, we got 860 rows now instead of 951 rows
+
+#Here we drop the SMILES-column in our 40similarityStructure, and get ready to merge together with the big dataset of ligands that binds to FPR2.
+similarStructure = similarStructure.drop("Smiles", axis=1)
+
+#This is an example of renaming the title of column
+similarStructure = similarStructure.rename(columns={"ChEMBL ID" : "ChEMBLID"})
+
+#Here we merge the big dataset (fpr2BindingData) into the similarity file, specified right means to merge from left to right, respectively the order of the file
+mergedTable = fpr2BindingData.merge(similarStructure, on="ChEMBLID", how="right") 
+
+#Reorganize the order of columns
+mergedTable = mergedTable.iloc[:, [0,2,1,3]]
+
+#Here we dropped all the pChEMBL_Value that is NaN
+mergedTable = mergedTable.dropna(subset = "pChEMBL_Value")
+
+#Sorting the values by descending order
+mergedTable = mergedTable.sort_values("pChEMBL_Value", ascending=[False])
+
+#if else function for determining whether it´s highly_active (pChEMBL > 7.3) or partial_active (below 7.3)
+mergedTable["activity"] = ["highly_active" if x >= 7.3 else "partial_active" for x in mergedTable["pChEMBL_Value"]]
+#Shape function gives 39 rows
+
+# Making a function for determining whether the pChEMBL_Value is active/inactive/partial_active
+#OBS! This is for the big file, fpr2BindingData
+def condition(x):
+    if x >= 7.3:
+        return "active"
+    elif x<5:
+        return "inactive"
+    else:
+        return "partial_active"
+    
+#Applying the conditions
+fpr2BindingData["activity"] = fpr2BindingData["pChEMBL_Value"].apply(condition)
+# shape function gives 860 rows
+
+#dropping all the duplicates by ChEMBLID
+fpr2bindingSortert = fpr2BindingData.sort_values("pChEMBL_Value", ascending = False).drop_duplicates("ChEMBLID").sort_index()
+#Give 741 rows
+
+#The final merge of the two tables, and we get ready to dock those ligandstructures
+finalMergedTable = fpr2bindingSortert.merge(mergedTable, on="ChEMBLID", how="left")
+# shape function showed 745 rows
+
+#writing to csv file
+finalMergedTable.to_csv("finalMergedTable.csv", sep=",", index= False)
+
